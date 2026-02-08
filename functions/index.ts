@@ -10,28 +10,90 @@ if (!admin.apps.length) {
 const db = getFirestore();
 
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
-const MODEL = "gemini-3-flash-preview";
+const MODEL = "gemini-2.5-flash";
 
+// ✅ ქართული System Prompt
 const NIA_SYSTEM_V1 = `
 SYSTEM ROLE — NIA (Neuro Integration Agent)
-...
+
+შენ ხარ პროგრამის ნეირო ინტეგრაციის აგენტი — ნია, სტრუქტურირებულ ველნეს აპლიკაციაში.
+შენი როლი მკაცრად შეზღუდულია და განსაზღვრულია მხოლოდ არსებული პროგრამის ფარგლებში.
+
+შენ ეხმარები მომხმარებელს მხოლოდ შემდეგ პროგრამებში:
+- „7-დღიანი გაღვიძება (wakeup_7_days)"
+- „21-დღიანი სომატური პროგრამა (program_21days)"
+
+შენი ამოცანაა მომხმარებლის მხარდაჭერა პროგრამის ყველა კომპონენტში, მაგრამ მხოლოდ მოწოდებული მონაცემების ფარგლებში.
+
+მკაცრი წესები (NON-NEGOTIABLE)
+
+1) მხოლოდ პროგრამის მონაცემები
+- არასოდეს დაამატო ახალი პრაქტიკა, ინგრედიენტი, ტექნიკა ან იდეა
+- არასოდეს შეცვალო რაოდენობები ან შინაარსი
+- არ ახსნა „რატომ" ან „როგორ" იმაზე მეტად, ვიდრე წერია DATA-ში
+
+2) უსაფრთხოების აბსოლუტური წესი (HARD STOP)
+თუ მომხმარებლის შეტყობინებაში ფიქსირდება ტკივილი, მწვავე დისკომფორტი, შფოთვა, თავბრუსხვევა ან შიში:
+- პასუხი უნდა შეწყდეს დაუყოვნებლივ
+- დაიბეჭდოს მხოლოდ: "შეწყვიტეთ პრაქტიკა ან დაუბრუნდით სუნთქვას."
+
+3) DATA Not Found — პროტოკოლი
+თუ მოთხოვნილი პროგრამის დღე არ არის ხელმისაწვდომი:
+- პასუხი: "ამ დღის პროგრამა ჯერ არ არის ხელმისაწვდომი."
+
+აკრძალული ქმედებები
+- სამედიცინო, ფსიქოლოგიური ან თერაპიული რჩევა
+- დიაგნოზი ან შეფასება
+- ქოუჩინგი ან ღია დიალოგის გაბმა
+- ავტორიტეტული ან დირექტიული ენა
+- ახალი პრაქტიკის ან ალტერნატივის შეთავაზება
+
+აკრძალული ფრაზები:
+- "გირჩევ", "უნდა", "აუცილებელია", "სჯობს", "გააკეთე", "სცადე", "მიიღე"
+- "you should", "you must", "do this", "try to"
+
+ენა და სტილი
+- უპასუხე მხოლოდ ქართულად
+- სტილი: მოკლე, მშვიდი, პირდაპირი (მაქსიმუმ 3-4 წინადადება)
+- ტონი: მხარდამჭერი, ავტორიტეტის გარეშე
+
+დაშვებული დახურვის მაგალითები:
+- "ეს საკმარისია დღევანდელი დღისთვის."
+- "აქ გაჩერებაც პრაქტიკის ნაწილია."
 `.trim();
 
-const INPUT_FORBIDDEN: string[] = ["წამალი", "დიაგნოზი", "სუიციდი"];
+const INPUT_FORBIDDEN: string[] = [
+  "წამალი",
+  "დიაგნოზი",
+  "სუიციდი",
+  "თვითმკვლელობა",
+  "ანტიდეპრესანტი",
+  "მედიკამენტი",
+  "მკურნალობა",
+  "ფსიქოზი",
+  "პანიკური შეტევა",
+  "ფსიქიატრი",
+  "ანტიბიოტიკი",
+  "რეცეპტი",
+  "ინექცია",
+  "ოპერაცია",
+];
 
 const HARD_STOP_TRIGGERS: string[] = [
-  "ტკივ",
-  "მწვავე",
-  "დისკომფორტ",
-  "შფოთ",
-  "თავბრუსხვევ",
-  "შიში",
+  "მწვავე ტკივილი",
+  "ძლიერი ტკივილი",
+  "ძლიერი თავბრუსხვევა",
+  "გულმკერდის ტკივილი",
+  "გულის აჩქარება",
+  "გონების დაკარგვა",
+  "სუნთქვის სირთულე",
+  "გულისრევა და ღებინება",
 ];
 
 const OUTPUT_FORBIDDEN_PATTERNS: RegExp[] = [
   /\b(გირჩევ|უნდა|აუცილებელია|სჯობს|გირჩევდი)\b/i,
-  /\b(მიიღე|გააკეთე|დაიწყე|შეწყვიტე|დალიო|დალევ)\b/i,
-  /\b(you should|you must|do this|stop doing)\b/i,
+  /\b(მიიღე|გააკეთე|დაიწყე|შეწყვიტე|დალიო|დალევ|სცადე)\b/i,
+  /\b(you should|you must|do this|stop doing|try to)\b/i,
   /\b(დიაგნოზი|მკურნალობა|რეცეპტი)\b/i,
   /\b(როგორც სპეციალისტი|როგორც ექიმი|მე გეუბნები|დარწმუნებით)\b/i,
 ];
@@ -44,15 +106,13 @@ const REFUSAL_TEMPLATES = {
   inputBlocked: [
     "ბოდიში, ამ თემაზე ვერ გიპასუხებ.",
     "ამ საკითხზე ვერ გიპასუხებ.",
-    "ამაზე პასუხის გაცემა არ შემიძლია.",
   ],
   outputFallback: [
-    "მოდით ნეიტრალურად: რა არის მთავარი, რის გაგებაც გინდა ახლა?",
-    "გთხოვ მითხარი, ზუსტად რა გჭირდება — მოკლე პასუხი თუ მეტი კონტექსტი?",
+    "მოდით დავუბრუნდეთ დღევანდელ პროგრამას. რა გაინტერესებს?",
+    "შეგიძლია დააკვირდე დღევანდელ ტექსტს და იქიდან გავაგრძელოთ.",
   ],
   serverError: [
     "ახლა ტექნიკური ხარვეზია. გთხოვ, ცოტა ხანში სცადე ისევ.",
-    "ამ ეტაპზე ვერ გიპასუხებ ტექნიკური მიზეზით. სცადე თავიდან.",
   ],
 };
 
@@ -63,19 +123,16 @@ function pick(arr: string[]): string {
 function hasUnknownUrls(text: string, allowed: string[]): boolean {
   const urls = text.match(/https?:\/\/[^\s)]+/g) || [];
   if (urls.length === 0) return false;
-
   const allowedSet = new Set(allowed);
   return urls.some((u) => !allowedSet.has(u));
 }
 
 function parseDayNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
-
   if (typeof v === "string") {
     const n = Number(v.trim());
     if (Number.isFinite(n)) return n;
   }
-
   return null;
 }
 
@@ -143,6 +200,7 @@ export const niaProxy = onRequest(
 
     const lower = message.toLowerCase();
 
+    // HARD STOP
     if (HARD_STOP_TRIGGERS.some((t) => lower.includes(t))) {
       res.status(200).json({
         ok: true,
@@ -151,6 +209,7 @@ export const niaProxy = onRequest(
       return;
     }
 
+    // INPUT FORBIDDEN
     if (INPUT_FORBIDDEN.some((w) => lower.includes(w))) {
       res.status(200).json({
         ok: true,
@@ -180,17 +239,27 @@ export const niaProxy = onRequest(
 
       dayData = dayQuery.docs[0].data();
 
+      // ✅ somatic_ref support
       const somaticRef = dayData?.somatic_ref;
 
-      const ids: string[] = Array.isArray(somaticRef)
-        ? somaticRef.filter((x: unknown) => typeof x === "string")
-        : typeof somaticRef === "string"
-        ? [somaticRef]
-        : [];
-
-      for (const id of ids) {
-        const doc = await db.collection("somatic_practices").doc(id).get();
-        if (doc.exists) practices.push(doc.data() || {});
+      if (somaticRef) {
+        if (Array.isArray(somaticRef)) {
+          for (const ref of somaticRef) {
+            try {
+              const d = await ref.get();
+              if (d?.exists) practices.push(d.data() || {});
+            } catch (e) {
+              console.error("SOMATIC_REF_ITEM_ERROR", e);
+            }
+          }
+        } else {
+          try {
+            const d = await somaticRef.get();
+            if (d?.exists) practices.push(d.data() || {});
+          } catch (e) {
+            console.error("SOMATIC_REF_ERROR", e);
+          }
+        }
       }
     } catch {
       res.status(200).json({
@@ -200,6 +269,7 @@ export const niaProxy = onRequest(
       return;
     }
 
+    // ✅ სრული Context
     const enrichedPrompt = `
 PROGRAM CONTEXT:
 
@@ -208,10 +278,23 @@ Day: ${dayNumber}
 
 Title: ${dayData?.title ?? ""}
 Focus: ${dayData?.focus ?? ""}
+Description: ${dayData?.description ?? ""}
+
+Mental Content: ${dayData?.mental_content ?? ""}
+Somatic Content: ${dayData?.somatic_content ?? ""}
+Tea Ritual: ${dayData?.tea_ritual_content ?? ""}
+Morning Elixir: ${dayData?.morning_elixir ?? ""}
+Seed Protocol: ${dayData?.seed_protocol ?? ""}
+Journaling Question: ${dayData?.journaling_question ?? ""}
+
+Somatic Practices:
+${practices.map((p) => `- ${p?.name ?? ""}: ${p?.description ?? ""}`).join("\n")}
 
 USER MESSAGE:
 ${message}
 `.trim();
+
+    console.log("ENRICHED_PROMPT:", enrichedPrompt);
 
     const url =
       "https://generativelanguage.googleapis.com/v1beta/models/" +
@@ -226,7 +309,10 @@ ${message}
         body: JSON.stringify({
           system_instruction: { parts: [{ text: NIA_SYSTEM_V1 }] },
           contents: [{ role: "user", parts: [{ text: enrichedPrompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+          generationConfig: { 
+            temperature: 0.2, 
+            maxOutputTokens: 1024,  // ✅ შემცირებული 4096-დან 1024-მდე
+          },
         }),
       });
 
@@ -238,25 +324,15 @@ ${message}
 
       let replyText = rawText.trim();
 
+      // ✅ URL whitelist (მხოლოდ მაშინ, როცა საჭიროა)
       if (allowedMediaUrls.length > 0 && hasUnknownUrls(replyText, allowedMediaUrls)) {
-  // Instead of dropping the whole response, just remove unknown links
-  replyText = replyText.replace(/https?:\/\/[^\s)]+/g, "[link removed]");
-}
+        replyText = pick(REFUSAL_TEMPLATES.outputFallback);
+      }
 
-if (!replyText) {
-  replyText = pick(REFUSAL_TEMPLATES.outputFallback);
-} else if (violatesOutputRules(replyText)) {
-  // Instead of discarding the whole response, soften it
-  replyText = replyText
-    .replace(/\bგირჩევ\b/gi, "შეგიძლია დააკვირდე")
-    .replace(/\bუნდა\b/gi, "შეიძლება")
-    .replace(/\bაუცილებელია\b/gi, "მნიშვნელოვანია")
-    .replace(/\bმიიღე\b/gi, "შეამჩნიე")
-    .replace(/\bგააკეთე\b/gi, "სცადე")
-    .replace(/\byou should\b/gi, "you could")
-    .replace(/\byou must\b/gi, "it may help to");
-}
-
+      // ✅ OUTPUT GUARDRAILS — ახლა ᲑᲚᲝᲙᲐᲕᲡ, არა "რბილებს"
+      if (!replyText || violatesOutputRules(replyText)) {
+        replyText = pick(REFUSAL_TEMPLATES.outputFallback);
+      }
 
       res.status(200).json({
         ok: true,
