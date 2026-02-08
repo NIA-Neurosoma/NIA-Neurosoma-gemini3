@@ -10,7 +10,7 @@ if (!admin.apps.length) {
 const db = getFirestore();
 
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3-flash-preview";
 
 // ✅ ქართული System Prompt
 const NIA_SYSTEM_V1 = `
