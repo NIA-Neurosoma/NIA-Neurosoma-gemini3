@@ -12,7 +12,7 @@ const db = getFirestore();
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const MODEL = "gemini-3-flash-preview";
 
-// ✅ ქართული System Prompt
+//
 const NIA_SYSTEM_V1 = `
 SYSTEM ROLE — NIA (Neuro Integration Agent)
 
@@ -239,7 +239,7 @@ export const niaProxy = onRequest(
 
       dayData = dayQuery.docs[0].data();
 
-      // ✅ somatic_ref support
+      //
       const somaticRef = dayData?.somatic_ref;
 
       if (somaticRef) {
@@ -269,7 +269,7 @@ export const niaProxy = onRequest(
       return;
     }
 
-    // ✅ სრული Context
+    // 
     const enrichedPrompt = `
 PROGRAM CONTEXT:
 
@@ -311,7 +311,7 @@ ${message}
           contents: [{ role: "user", parts: [{ text: enrichedPrompt }] }],
           generationConfig: { 
             temperature: 0.2, 
-            maxOutputTokens: 1024,  // ✅ შემცირებული 4096-დან 1024-მდე
+            maxOutputTokens: 2048//
           },
         }),
       });
@@ -324,12 +324,12 @@ ${message}
 
       let replyText = rawText.trim();
 
-      // ✅ URL whitelist (მხოლოდ მაშინ, როცა საჭიროა)
+      // 
       if (allowedMediaUrls.length > 0 && hasUnknownUrls(replyText, allowedMediaUrls)) {
         replyText = pick(REFUSAL_TEMPLATES.outputFallback);
       }
 
-      // ✅ OUTPUT GUARDRAILS — ახლა ᲑᲚᲝᲙᲐᲕᲡ, არა "რბილებს"
+      // 
       if (!replyText || violatesOutputRules(replyText)) {
         replyText = pick(REFUSAL_TEMPLATES.outputFallback);
       }
